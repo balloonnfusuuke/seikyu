@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.print-area {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: white;
+}

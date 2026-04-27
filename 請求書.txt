@@ -1,0 +1,332 @@
+# 請求書作成Webシステム — Cursor 指示書
+
+## 概要
+
+ブラウザ上で請求書の各項目を入力し、画面プレビューを確認しながら印刷・PDF出力できるWebアプリを作成する。
+フレームワークは **Next.js (App Router) + Tailwind CSS** を使用すること。
+
+---
+
+## 技術スタック
+
+| 項目 | 採用技術 |
+|------|----------|
+| フレームワーク | Next.js 14（App Router） |
+| スタイリング | Tailwind CSS |
+| 言語 | TypeScript |
+| PDF出力 | ブラウザの `window.print()` + 印刷用CSS |
+| 状態管理 | React useState（外部ライブラリ不要） |
+
+---
+
+## ディレクトリ構成
+
+```
+/
+├── app/
+│   ├── page.tsx          # 入力フォーム画面
+│   └── layout.tsx        # ルートレイアウト
+├── components/
+│   ├── InvoiceForm.tsx   # 入力フォームコンポーネント
+│   └── InvoicePreview.tsx# 請求書プレビュー（印刷対象）
+├── types/
+│   └── invoice.ts        # 型定義
+└── styles/
+    └── print.css         # 印刷専用スタイル
+```
+
+---
+
+## 型定義（types/invoice.ts）
+
+```typescript
+export type LineItem = {
+  id: string;
+  description: string; // 品番・品名
+  quantity: number;    // 数量
+  unitPrice: number;   // 単価
+};
+
+export type InvoiceData = {
+  // 発行日・番号
+  issueDate: string;       // 例: 2025年5月28日
+  invoiceNumber: string;   // 例: 20250601-001
+
+  // 宛先
+  clientName: string;      // 例: 株式会社YMG
+
+  // 件名
+  subject: string;
+
+  // 支払い期限
+  dueDate: string;
+
+  // 発行者情報
+  issuerName: string;
+  issuerPostalCode: string;
+  issuerAddress: string;
+  issuerTel: string;
+
+  // 明細行
+  lineItems: LineItem[];
+
+  // 消費税率（%）
+  taxRate: number; // 通常10
+
+  // 振込先
+  bankName: string;
+  branchName: string;
+  accountNumber: string;
+  accountHolder: string;
+};
+```
+
+---
+
+## 画面構成
+
+画面は左右2カラム構成とする。
+
+- **左カラム（入力フォーム）**: 各フィールドを入力するフォーム
+- **右カラム（リアルタイムプレビュー）**: 入力内容を即時反映した請求書レイアウト
+
+---
+
+## InvoiceForm コンポーネント仕様
+
+### フォームセクション一覧
+
+#### ① 請求書基本情報
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| 発行日 | date | — |
+| 請求番号 | text | 20250601-001 |
+
+#### ② 宛先情報
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| 宛先会社名 | text | 株式会社YMG |
+
+#### ③ 件名
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| 件名 | text | 交通費と会場スタッフとしての作業費を下記の通りご請求申し上げます。 |
+
+#### ④ 支払い期限
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| お支払い期限 | date | — |
+
+#### ⑤ 発行者情報
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| 氏名・会社名 | text | 泉本佳佑 |
+| 郵便番号 | text | 558-0041 |
+| 住所 | text | 大阪市住吉区南住吉4-5-3-204 |
+| 電話番号 | tel | 080-1465-9503 |
+
+#### ⑥ 明細行（動的追加・削除）
+各行に以下のフィールドを持つ。行の追加ボタン「＋行を追加」と各行の削除ボタン「×」を設ける。
+
+| フィールド名 | input type | 備考 |
+|---|---|---|
+| 品番・品名 | text | 自由入力 |
+| 数量 | number | 最小値1 |
+| 単価（円） | number | カンマ区切り表示 |
+| 金額 | — | 数量×単価を自動計算・表示（入力不可） |
+
+#### ⑦ 消費税率
+- デフォルト10%（数値入力可、通常は変更不要）
+
+#### ⑧ 振込先情報
+| フィールド名 | input type | placeholder例 |
+|---|---|---|
+| 銀行名 | text | 三菱UFJ銀行 |
+| 支店名 | text | あびこ支店 |
+| 口座番号 | text | 4865633 |
+| 口座名義（カタカナ） | text | イズモトケイスケ |
+
+---
+
+## 金額計算ロジック
+
+```typescript
+// 各明細行の金額
+const lineAmount = (item: LineItem) => item.quantity * item.unitPrice;
+
+// 小計（税込明細の場合は消費税込みの合計）
+const subtotal = lineItems.reduce((sum, item) => sum + lineAmount(item), 0);
+
+// 消費税額（内税として計算）
+// 内税の場合: 税額 = subtotal × taxRate / (100 + taxRate)
+const taxAmount = Math.round(subtotal * taxRate / (100 + taxRate));
+
+// 合計 = 小計（＝ご請求金額）
+const total = subtotal;
+```
+
+> **注意**: 写真の請求書は「税込10%」表記のため、小計＝合計（内税方式）で実装する。
+
+---
+
+## InvoicePreview コンポーネント仕様（レイアウト詳細）
+
+A4縦（210mm × 297mm）を模したホワイトカードとして描画する。
+Tailwindクラスで `w-[210mm] min-h-[297mm]` を指定し、印刷時にそのまま使用する。
+
+### レイアウト構造
+
+```
+┌─────────────────────────────────────────────────────┐
+│                              2025年5月28日           │
+│                              請求番号：20250601-001  │
+│                                                     │
+│          請求書（中央、大きいフォント、太字）               │
+│                                                     │
+│  株式会社YMG 様                  泉本佳佑             │
+│                                 〒558-0041           │
+│  件名：交通費と会場スタッフとしての    大阪市住吉区…       │
+│        作業費を下記の通りご請求…     TEL:080-…        │
+│                                                     │
+│  ご請求金額   88,480円（下線付き）                      │
+│                                                     │
+│  お支払い期限：2025年6月15日                           │
+│                                                     │
+│ ┌──────────────┬──┬──────┬──────┐              │
+│ │ 品番・品名     │数量│ 単価  │ 金額  │              │
+│ ├──────────────┼──┼──────┼──────┤              │
+│ │ 交通費 JR我孫子…│ 2 │  840 │ 1,680│              │
+│ │ …            │  │      │      │              │
+│ ├──────────────┴──┴──────┼──────┤              │
+│ │              小計       │88,480│              │
+│ │  消費税（10%内税）        │ 8,043│              │
+│ │              合計       │88,480│              │
+│ └─────────────────────────┴──────┘              │
+│                                                     │
+│  お振込先：三菱UFJ銀行 あびこ支店                       │
+│           口座番号4865633　イズモトケイスケ             │
+└─────────────────────────────────────────────────────┘
+```
+
+### 各パーツの実装ポイント
+
+#### ヘッダー部
+- 右上に日付・請求番号を小さめのテキストで表示
+- 「請求書」はページ上部中央に `text-2xl font-bold` で表示
+
+#### 宛先・発行者（2カラム）
+```html
+<div class="flex justify-between mt-4">
+  <!-- 左：宛先 -->
+  <div>
+    <p class="border-b border-black inline-block text-lg font-bold">{clientName} 様</p>
+    <p class="mt-2 text-sm">{subject}</p>
+  </div>
+  <!-- 右：発行者 -->
+  <div class="text-sm text-right">
+    <p>{issuerName}</p>
+    <p>〒{issuerPostalCode}</p>
+    <p>{issuerAddress}</p>
+    <p>TEL:{issuerTel}</p>
+  </div>
+</div>
+```
+
+#### ご請求金額（下線付き）
+```html
+<div class="mt-4 flex items-baseline gap-2">
+  <span class="font-bold">ご請求金額</span>
+  <span class="text-xl font-bold underline">{total.toLocaleString()}円</span>
+</div>
+```
+
+#### 明細テーブル
+- ヘッダー行: 背景色 `bg-gray-100`、テキスト中央揃え
+- 金額列: 右揃え
+- 列幅比率: `品番・品名 60% | 数量 10% | 単価 15% | 金額 15%`
+- 集計行（小計・消費税・合計）は右2列のみ使用、左のセルは `colspan`
+
+#### 振込先
+```html
+<div class="mt-4 text-sm">
+  <p>お振込先：{bankName}　{branchName}</p>
+  <p class="ml-8">口座番号{accountNumber}　{accountHolder}</p>
+</div>
+```
+
+---
+
+## 印刷・PDF出力
+
+### print.cssの設定
+
+```css
+@media print {
+  /* フォームを非表示にし、プレビューのみ印刷 */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-area {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 15mm;
+    box-shadow: none;
+    page-break-after: always;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
+```
+
+### 印刷ボタン
+```tsx
+<button
+  className="no-print bg-blue-600 text-white px-6 py-2 rounded"
+  onClick={() => window.print()}
+>
+  印刷 / PDF保存
+</button>
+```
+
+---
+
+## 実装手順（Cursorへの指示）
+
+以下の順序でファイルを作成すること。
+
+1. `types/invoice.ts` — 型定義を実装
+2. `components/InvoicePreview.tsx` — プレビューコンポーネントを実装（ダミーデータで動作確認）
+3. `components/InvoiceForm.tsx` — 入力フォームを実装（useState で状態管理）
+4. `app/page.tsx` — 左右2カラムで Form と Preview を並べて表示
+5. `styles/print.css` — 印刷用CSSを追加し、`layout.tsx` でインポート
+6. 動作確認：明細行の追加・削除、金額自動計算、印刷プレビューを確認
+
+---
+
+## UXの注意点
+
+- 明細行は最低1行を初期表示する（削除で0行にはならないようバリデーション）
+- 数値フィールドは空欄を `0` として扱い、表示はカンマ区切り（`toLocaleString()`）
+- 入力した内容はリアルタイムでプレビューに反映する（debounce不要）
+- 印刷時はフォームパネルを完全に非表示にし、請求書のみが出力されるようにする
+- 「合計」行はフォントを太字・やや大きめにして視認性を上げる
+
+---
+
+## 追加機能（オプション、余裕があれば実装）
+
+| 機能 | 内容 |
+|---|---|
+| テンプレート保存 | `localStorage` に発行者情報・振込先を保存し、次回起動時に自動入力 |
+| 請求書番号自動採番 | 発行日をもとに `YYYYMMDD-001` 形式で自動生成 |
+| 行の並び替え | ドラッグ＆ドロップで明細行を並び替え（`@dnd-kit/core` を使用） |
+| CSV読み込み | 明細データをCSVで一括インポート |
+
+---
+
+*以上の仕様に従い、コンポーネントを順番に実装してください。*
