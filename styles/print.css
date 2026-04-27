@@ -25,6 +25,15 @@
     page-break-after: always;
   }
 
+  .preview-input,
+  .preview-input:focus {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
   @page {
     size: A4;
     margin: 0;

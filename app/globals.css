@@ -14,8 +14,19 @@ body {
 }
 
 .print-area {
-  width: 210mm;
+  width: min(210mm, 100%);
   min-height: 297mm;
   margin: 0 auto;
   background: white;
+}
+
+.preview-input {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  outline: none;
+}
+
+.preview-input::placeholder {
+  color: #9ca3af;
 }
