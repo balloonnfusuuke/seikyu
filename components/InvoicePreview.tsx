@@ -111,14 +111,13 @@ export default function InvoicePreview({ data, setData }: Props) {
               placeholder="100-0001"
             />
           </p>
-          <p>
-            <input
-              className="preview-input w-full text-left"
-              value={data.issuerAddress}
-              onChange={(e) => updateField("issuerAddress", e.target.value)}
-              placeholder="東京都千代田区丸の内1-1-1"
-            />
-          </p>
+          <textarea
+            className="preview-input block w-full resize-none text-left leading-relaxed"
+            rows={2}
+            value={data.issuerAddress}
+            onChange={(e) => updateField("issuerAddress", e.target.value)}
+            placeholder="東京都千代田区丸の内1-1-1"
+          />
           <p className="inline-flex w-full items-baseline justify-start gap-1">
             <span>TEL:</span>
             <input
